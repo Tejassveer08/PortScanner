@@ -1,51 +1,51 @@
-#!/usr/bin/env python
+# src/single/scanner.py
+"""Single-threaded port scanner (Python 3.8)
+Reference implementation: scans ports sequentially.
+Used as fallback or for small scans.
+"""
+
+from typing import Iterable, List, Tuple
 import socket
-import subprocess
-import sys
-from datetime import datetime
+import contextlib
 
-# Clear the screen
-subprocess.call('clear', shell=True)
+DEFAULT_TIMEOUT = 1.0  # seconds
 
-# Ask for input
-remoteServer    = raw_input("Enter a remote host to scan: ")
-remoteServerIP  = socket.gethostbyname(remoteServer)
+def is_port_open(host: str, port: int, timeout: float = DEFAULT_TIMEOUT) -> bool:
+    """Return True if host:port accepts TCP connection."""
+    with contextlib.closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as sock:
+        sock.settimeout(timeout)
+        try:
+            sock.connect((host, port))
+            return True
+        except Exception:
+            return False
 
-# Print a nice banner with information on which host we are about to scan
-print "-" * 60
-print "Please wait, scanning remote host....", remoteServerIP
-print "-" * 60
+def scan_ports(host: str, ports: Iterable[int], timeout: float = DEFAULT_TIMEOUT) -> List[Tuple[int, bool]]:
+    results = []
+    for p in ports:
+        open_ = is_port_open(host, p, timeout=timeout)
+        results.append((p, open_))
+    return results
 
-# Check what time the scan started
-t1 = datetime.now()
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Single-threaded port scanner (py3)")
+    parser.add_argument("host", help="Target host (IP or hostname)")
+    parser.add_argument("--ports", help="Comma-separated ports or range e.g. 20-25,80", default="1-1024")
+    parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT)
+    args = parser.parse_args()
 
-# scanning the port only in range of (1, 8888)
+    def parse_ports(s: str):
+        out = []
+        for part in s.split(","):
+            if "-" in part:
+                a,b = part.split("-",1)
+                out.extend(range(int(a), int(b)+1))
+            else:
+                out.append(int(part))
+        return out
 
-try:
-    for port in range(1,8888):  
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        result = sock.connect_ex((remoteServerIP, port))
-        if result == 0:
-            print "Port {}: 	 Open".format(port)
-        sock.close()
+    ports = parse_ports(args.ports)
+    for port, open_ in scan_ports(args.host, ports, timeout=args.timeout):
+        print(f"{port}: {'OPEN' if open_ else 'closed'}")
 
-except KeyboardInterrupt:
-    print "You pressed Ctrl+C"
-    sys.exit()
-
-except socket.gaierror:
-    print 'Hostname could not be resolved. Exiting'
-    sys.exit()
-
-except socket.error:
-    print "Couldn't connect to server"
-    sys.exit()
-
-# Checking the time again
-t2 = datetime.now()
-
-# Calculates the difference of time, to see how long it took to run the script
-total =  t2 - t1
-
-# Printing the information to screen
-print 'Scanning Completed in: ', total
